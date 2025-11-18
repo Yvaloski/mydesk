@@ -1,0 +1,273 @@
+<div id="desktop-actions">
+          <button id="btn-add-folder">Nouveau dossier</button>
+          <button id="btn-upload">Uploader un fichier</button>
+        </div>
+        <div id="result" style="position:fixed;top:70px;right:30px;z-index:3000;"></div>
+
+        <!-- Modal création dossier -->
+        <div id="modal-create-folder" style="display:none;position:fixed;top:20%;left:50%;transform:translate(-50%,0);background:#222;color:#fff;padding:24px 32px;z-index:2000;border-radius:12px;box-shadow:0 4px 32px #000a;min-width:300px;">
+          <h3>Créer un dossier</h3>
+          <form id="create-folder-form" method="POST" action="/create-folder">
+            <input type="text" name="folderName" placeholder="Nom du dossier" required />
+            <button type="submit">Créer</button>
+            <button type="button" onclick="document.getElementById('modal-create-folder').style.display='none'">Annuler</button>
+          </form>
+        </div>
+
+        <!-- Modal upload fichier -->
+        <div id="modal-upload" style="display:none;position:fixed;top:20%;left:50%;transform:translate(-50%,0);background:#222;color:#fff;padding:24px 32px;z-index:2000;border-radius:12px;box-shadow:0 4px 32px #000a;min-width:300px;">
+          <h3>Uploader un fichier</h3>
+          <form id="upload-form" method="POST" action="/upload" enctype="multipart/form-data">
+            <select name="targetFolder" required>
+              <option value="">Choisir un dossier</option>
+              <% folders.forEach(function(folder) { %>
+                <option value="<%= folder %>"><%= folder %></option>
+              <% }); %>
+            </select>
+            <input type="file" name="document" required />
+            <button type="submit">Uploader</button>
+            <button type="button" onclick="document.getElementById('modal-upload').style.display='none'">Annuler</button>
+          </form>
+        </div>
+    <!-- Modal pour afficher le contenu d'un dossier -->
+    <div id="folder-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#222;color:#fff;padding:24px 32px;z-index:2000;border-radius:12px;box-shadow:0 4px 32px #000a;min-width:300px;min-height:120px;">
+      <h3 id="modal-folder-name"></h3>
+      <ul id="modal-folder-files"></ul>
+      <div style="margin-top:16px;display:flex;gap:12px;">
+        <button id="delete-folder-modal-btn" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:8px 16px;display:none;">Supprimer ce dossier</button>
+        <button onclick="document.getElementById('folder-modal').style.display='none'">Fermer</button>
+      </div>
+    </div>
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= title %></title>
+    <link rel='stylesheet' href='/stylesheets/style.css' />
+  </head>
+  <body>
+    <style>
+      html, body {
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: url('https://wallpapercave.com/wp/wp2757874.jpg') center center/cover no-repeat fixed;
+        min-height: 100vh;
+        font-family: Segoe UI, Arial, sans-serif;
+      }
+      #desktop {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+      }
+      .desktop-icon {
+        position: absolute;
+        width: 80px;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+      }
+      .desktop-icon img {
+        width: 48px;
+        height: 48px;
+        margin-bottom: 4px;
+      }
+      .desktop-icon span {
+        display: block;
+        color: #fff;
+        text-shadow: 1px 1px 2px #000;
+        font-size: 14px;
+        word-break: break-all;
+      }
+      #desktop-actions {
+        position: fixed;
+        top: 20px;
+        right: 30px;
+        z-index: 3000;
+        display: flex;
+        gap: 12px;
+      }
+      #desktop-actions button {
+        background: #2d7be5;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-size: 15px;
+        cursor: pointer;
+        box-shadow: 0 2px 8px #0002;
+        transition: background 0.2s;
+      }
+      #desktop-actions button:hover {
+        background: #155a9c;
+      }
+      #result {
+        color: #fff;
+        margin-top: 8px;
+        text-shadow: 1px 1px 2px #000;
+      }
+    </style>
+
+    <div id="desktop">
+      <% let x = 40, y = 40, stepY = 100; %>
+      <% folders.forEach(function(folder, i) { %>
+        <div class="desktop-icon" data-folder="<%= folder %>" draggable="true"
+          style="left: <%= x %>px; top: <%= y + i*stepY %>px; position: absolute;">
+          <img src="/images/folder.png" alt="Dossier" />
+          <span><%= folder %></span>
+        </div>
+      <% }); %>
+    </div>
+
+
+    <script>
+      // Affichage des modals d'action (après chargement du DOM)
+      window.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('btn-add-folder').onclick = function() {
+          document.getElementById('modal-create-folder').style.display = 'block';
+        };
+        document.getElementById('btn-upload').onclick = function() {
+          document.getElementById('modal-upload').style.display = 'block';
+        };
+
+        // Drag & drop desktop icons avec sauvegarde/restauration des positions
+        let dragged = null;
+        const files = <%- JSON.stringify(files) %>;
+        const defaultX = 40, defaultY = 40, stepY = 100;
+        // Restaure les positions sauvegardées
+        function restorePositions() {
+          const saved = JSON.parse(localStorage.getItem('desktopPositions') || '{}');
+          document.querySelectorAll('.desktop-icon').forEach((icon, i) => {
+            const folder = icon.dataset.folder;
+            if (saved[folder]) {
+              icon.style.left = saved[folder].left;
+              icon.style.top = saved[folder].top;
+            } else {
+              icon.style.left = defaultX + 'px';
+              icon.style.top = (defaultY + i*stepY) + 'px';
+            }
+          });
+        }
+        restorePositions();
+
+        // Sauvegarde les positions actuelles
+        function savePositions() {
+          const positions = {};
+          document.querySelectorAll('.desktop-icon').forEach(icon => {
+            positions[icon.dataset.folder] = {
+              left: icon.style.left,
+              top: icon.style.top
+            };
+          });
+          localStorage.setItem('desktopPositions', JSON.stringify(positions));
+        }
+
+        document.querySelectorAll('.desktop-icon').forEach(icon => {
+          icon.addEventListener('dragstart', function(e) {
+            dragged = this;
+            e.dataTransfer.setData('text/plain', this.dataset.folder);
+          });
+          icon.addEventListener('dragend', function(e) {
+            dragged = null;
+          });
+          icon.addEventListener('dblclick', function(e) {
+            // Afficher le contenu du dossier dans la modal
+            const folder = this.dataset.folder;
+            document.getElementById('modal-folder-name').innerText = folder;
+            const fileList = files[folder] || [];
+            const ul = document.getElementById('modal-folder-files');
+            ul.innerHTML = '';
+            if(fileList.length === 0) {
+              ul.innerHTML = '<li><em>(vide)</em></li>';
+            } else {
+              fileList.forEach(f => {
+                const li = document.createElement('li');
+                li.innerText = f;
+                ul.appendChild(li);
+              });
+            }
+            // Affiche le bouton supprimer et stocke le nom du dossier courant
+            const delBtn = document.getElementById('delete-folder-modal-btn');
+            delBtn.style.display = 'inline-block';
+            delBtn.dataset.folder = folder;
+            document.getElementById('folder-modal').style.display = 'block';
+          });
+        });
+
+        // Suppression de dossier depuis la modal
+        const deleteButton = document.getElementById('delete-folder-modal-btn');
+        if (deleteButton) {
+          deleteButton.addEventListener('click', async function() {
+            const folder = this.dataset.folder;
+            if (!folder) {
+              document.getElementById('result').innerText = 'Erreur: Aucun dossier sélectionné.';
+              return;
+            }
+            if (confirm(`Supprimer le dossier "${folder}" ?`)) {
+              try {
+                const response = await fetch('/delete-folder', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ folderName: folder })
+                });
+
+                if (!response.ok) {
+                  throw new Error('Erreur réseau');
+                }
+
+                const result = await response.json();
+                document.getElementById('result').innerText = result.success
+                  ? `Dossier supprimé: ${folder}`
+                  : `Erreur: ${result.error}`;
+
+                if (result.success) {
+                  location.reload();
+                }
+              } catch (error) {
+                document.getElementById('result').innerText = `Erreur: ${error.message}`;
+              }
+            }
+          });
+        }
+
+        // Drag & drop sur le bureau
+        document.getElementById('desktop').addEventListener('dragover', function(e) {
+          e.preventDefault();
+        });
+        document.getElementById('desktop').addEventListener('drop', function(e) {
+          e.preventDefault();
+          if (dragged) {
+            dragged.style.left = (e.clientX - 40) + 'px';
+            dragged.style.top = (e.clientY - 40) + 'px';
+            savePositions();
+          }
+        });
+
+        // Création de dossier sans recharger la page
+        document.getElementById('create-folder-form').onsubmit = async function(e) {
+          e.preventDefault();
+          const form = e.target;
+          const data = new URLSearchParams(new FormData(form));
+          const res = await fetch(form.action, { method: 'POST', body: data });
+          const json = await res.json();
+          document.getElementById('result').innerText = json.success ? `Dossier créé: ${json.folder}` : `Erreur: ${json.error}`;
+          if(json.success) location.reload();
+        };
+        // Upload sans recharger la page
+        document.getElementById('upload-form').onsubmit = async function(e) {
+          e.preventDefault();
+          const form = e.target;
+          const formData = new FormData(form);
+          const res = await fetch(form.action, { method: 'POST', body: formData });
+          const json = await res.json();
+          document.getElementById('result').innerText = json.success ? `Fichier uploadé: ${json.file}` : `Erreur: ${json.error}`;
+          if(json.success) location.reload();
+        };
+      });
+    </script>
+  </body>
+</html>
