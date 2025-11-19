@@ -4,16 +4,19 @@
  * Module dependencies.
  */
 
-var app = require('../app');
+// MODIFIE : Remplacement de 'import app, { set } from '../app';' par require
+var app = require('../app'); 
 var debug = require('debug')('myexpressapp:server');
-var http = require('http');
+// MODIFIE : Remplacement de 'import { createServer } from 'http';' par require
+var http = require('http'); 
 
 /**
  * Get port from environment and store in Express.
  */
 
 var port = normalizePort(process.env.PORT || '3000');
-app.set('port', port);
+// MODIFIE : set est une méthode d'Express (l'objet 'app'), on l'appelle donc sur 'app'.
+app.set('port', port); 
 
 /**
  * Create HTTP server.
